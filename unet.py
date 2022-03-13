@@ -24,7 +24,7 @@ def model(x):
         """
         gate = Gate(
             f'{mul0}x0e + {mul0}x0o', [jax.nn.gelu, jnp.tanh],
-            f'{4 * mul1}x0e', [jax.nn.sigmoid], f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o',
+            f'{2 * mul1 + 2 * mul2}x0e', [jax.nn.sigmoid], f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o',
         )
         for _ in range(1 + 3):
             gate = jax.vmap(gate)
@@ -92,18 +92,18 @@ def cerebellum(i):
     image = image.get_fdata() / 600
     label = label.get_fdata()
 
-    odd_label = -np.ones_like(label)
+    even_label = -np.ones_like(label)
 
     # left cerebellum:
-    odd_label[label == 6] = 1
-    odd_label[label == 7] = 1
-    odd_label[label == 8] = 1
+    even_label[label == 6] = 1
+    even_label[label == 7] = 1
+    even_label[label == 8] = 1
     # right cerebellum:
-    odd_label[label == 45] = 1
-    odd_label[label == 46] = 1
-    odd_label[label == 47] = 1
+    even_label[label == 45] = 1
+    even_label[label == 46] = 1
+    even_label[label == 47] = 1
 
-    return image, odd_label
+    return image, even_label
 
 
 def main():
@@ -175,3 +175,7 @@ def main():
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, loss, accuracy, pred = update(params, opt_state, x_patch, y_patch)
         print(f"[{i}] loss = {loss:.2e}  accuracy = {100 * accuracy}%  pred = [{pred.min():.2e}, {pred.max():.2e}]")
+
+
+if __name__ == "__main__":
+    main()
