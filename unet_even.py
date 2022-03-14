@@ -53,7 +53,7 @@ def model(x):
     x = x[..., None]
     x = IrrepsData.from_contiguous("0e", x)
 
-    mul = 4
+    mul = 3
 
     # Block A
     x = cbg(x, mul)
