@@ -34,7 +34,14 @@ def model(x):
         return x
 
     def down(x):  # TODO replace by pool max
-        return jax.tree_map(lambda a: a[:, ::2, ::2, ::2], x)
+        def pool(x):
+            return hk.avg_pool(
+                x,
+                window_shape=(1, 2, 2, 2, 1),
+                strides=(1, 2, 2, 2, 1),
+                padding='SAME',
+            )
+        return jax.tree_map(pool, x)
 
     def up(x):
         def z0(x):
@@ -46,7 +53,7 @@ def model(x):
     x = x[..., None]
     x = IrrepsData.from_contiguous("0e", x)
 
-    mul = 2
+    mul = 4
 
     # Block A
     x = cbg(x, mul)
@@ -60,21 +67,38 @@ def model(x):
 
     # Block C
     x = cbg(x, 4 * mul)
-    x = cbg(x, 4 * mul)
+    x_c = x = cbg(x, 4 * mul)
+    x = down(x)
 
     # Block D
+    x = cbg(x, 8 * mul)
+    x = cbg(x, 8 * mul)
+
+    # Block E
+    x = up(x)
+    x = IrrepsData.cat([x, x_c])
+    x = cbg(x, 4 * mul)
+    x = cbg(x, 4 * mul)
+
+    # Block F
     x = up(x)
     x = IrrepsData.cat([x, x_b])
     x = cbg(x, 2 * mul)
     x = cbg(x, 2 * mul)
 
-    # Block E
+    # Block G
     x = up(x)
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul)
-    x = cbg(x, mul)
+    x = cbg(x, mul)  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
 
-    x = Convolution(x.irreps, Irreps('0e'), **kw)(x.contiguous)
+    x = Convolution(x.irreps, Irreps(f'{8 * mul}x0e'), **kw)(x.contiguous)
+
+    for h in [8 * mul, 1]:
+        x = hk.InstanceNorm(create_scale=True, create_offset=True, data_format="N...C")(x)
+        x = jax.nn.gelu(x)
+        x = hk.Linear(h, with_bias=True)(x)
+
     x = x[..., 0]
     return x
 
@@ -92,6 +116,9 @@ def cerebellum(i):
     label = label.get_fdata()
 
     even_label = -np.ones_like(label)
+
+    # brain stem
+    even_label[label == 16] = 1
 
     # left cerebellum:
     even_label[label == 6] = 1
@@ -118,14 +145,14 @@ def toy_data():
 
 def main():
     print('start script', flush=True)
-    size = 96
+    size = 128
 
     def unpad(z):
         n = 8
         return z[..., n:-n, n:-n, n:-n]
 
     # Optimizer
-    learning_rate = 0.5
+    learning_rate = 5e-3
     opt = optax.adam(learning_rate)
 
     # Update function
@@ -165,12 +192,12 @@ def main():
 
     rng = jax.random.PRNGKey(2)
     x = jnp.ones((1, size, size, size))
-    print('start to init', flush=True)
+    print('initialize...', flush=True)
     params = model.init(rng, x)
-    print('init done', flush=True)
+    print('init. done', flush=True)
     opt_state = opt.init(params)
 
-    x_data, y_data = toy_data()
+    x_data, y_data = cerebellum(1)
     x_data = x_data[None]
     y_data = y_data[None]
 
