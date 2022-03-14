@@ -107,6 +107,7 @@ def cerebellum(i):
 
 
 def main():
+    print('start script', flush=True)
     size = 96
 
     def unpad(z):
@@ -154,7 +155,9 @@ def main():
 
     rng = jax.random.PRNGKey(2)
     x = jnp.ones((1, size, size, size))
+    print('start to init', flush=True)
     params = model.init(rng, x)
+    print('init done', flush=True)
     opt_state = opt.init(params)
 
     x_data, y_data = cerebellum(1)
@@ -171,10 +174,11 @@ def main():
             if np.sum(unpad(y_patch) == 1) > 0:
                 return x_patch, y_patch
 
+    print('start training (compiling)', flush=True)
     for i in range(2000):
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, loss, accuracy, pred = update(params, opt_state, x_patch, y_patch)
-        print(f"[{i}] loss = {loss:.2e}  accuracy = {100 * accuracy}%  pred = [{pred.min():.2e}, {pred.max():.2e}]")
+        print(f"[{i}] loss = {loss:.2e}  accuracy = {100 * accuracy}%  pred = [{pred.min():.2e}, {pred.max():.2e}]", flush=True)
 
 
 if __name__ == "__main__":
