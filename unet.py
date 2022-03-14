@@ -14,19 +14,18 @@ from e3nn_jax.experimental.voxel_pooling import zoom
 def model(x):
     kw = dict(
         irreps_sh=Irreps('0e + 1o + 2e'),
-        diameter=2 * 2.5,
-        num_radial_basis=2,
+        diameter=5.0,
+        num_radial_basis=5,
         steps=(1.0, 1.0, 1.0)
     )
 
-    def cbg(x, mul0, mul1, mul2):
-        """Convolution, BatchNorm, Gate
-        """
+    def cbg(x, mul):
+        mul0, mul1, mul2 = 4 * mul, 2 * mul, mul
         gate = Gate(
             f'{mul0}x0e + {mul0}x0o', [jax.nn.gelu, jnp.tanh],
             f'{2 * mul1 + 2 * mul2}x0e', [jax.nn.sigmoid], f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o',
         )
-        for _ in range(1 + 3):
+        for _ in range(1 + 3):  # vectorize for axies [batch, x, y, z]
             gate = jax.vmap(gate)
 
         x = Convolution(x.irreps, gate.irreps_in, **kw)(x.contiguous)
@@ -34,12 +33,12 @@ def model(x):
         x = gate(x)
         return x
 
-    def down(x):
+    def down(x):  # TODO replace by pool max
         return jax.tree_map(lambda a: a[:, ::2, ::2, ::2], x)
 
     def up(x):
         def z0(x):
-            return zoom(x, 2.0)
+            return zoom(x, 2.0)  # bilinear interpolation
         z1 = jax.vmap(z0, -1, -1)
         z2 = jax.vmap(z1, -1, -1)
         return IrrepsData(x.irreps, z1(x.contiguous), jax.tree_map(z2, x.list))
@@ -47,33 +46,33 @@ def model(x):
     x = x[..., None]
     x = IrrepsData.from_contiguous("0e", x)
 
-    n = 2
+    mul = 2
 
     # Block A
-    x = cbg(x, 4 * n, 2 * n, n)
-    x_a = x = cbg(x, 4 * n, 2 * n, n)
+    x = cbg(x, mul)
+    x_a = x = cbg(x, mul)
     x = down(x)
 
     # Block B
-    x = cbg(x, 8 * n, 4 * n, 2 * n)
-    x_b = x = cbg(x, 8 * n, 4 * n, 2 * n)
+    x = cbg(x, 2 * mul)
+    x_b = x = cbg(x, 2 * mul)
     x = down(x)
 
     # Block C
-    x = cbg(x, 16 * n, 8 * n, 4 * n)
-    x = cbg(x, 16 * n, 8 * n, 4 * n)
+    x = cbg(x, 4 * mul)
+    x = cbg(x, 4 * mul)
 
     # Block D
     x = up(x)
     x = IrrepsData.cat([x, x_b])
-    x = cbg(x, 8 * n, 4 * n, 2 * n)
-    x = cbg(x, 8 * n, 4 * n, 2 * n)
+    x = cbg(x, 2 * mul)
+    x = cbg(x, 2 * mul)
 
     # Block E
     x = up(x)
     x = IrrepsData.cat([x, x_a])
-    x = cbg(x, 4 * n, 2 * n, n)
-    x = cbg(x, 4 * n, 2 * n, n)
+    x = cbg(x, mul)
+    x = cbg(x, mul)
 
     x = Convolution(x.irreps, Irreps('0e'), **kw)(x.contiguous)
     x = x[..., 0]
@@ -104,6 +103,17 @@ def cerebellum(i):
     even_label[label == 47] = 1
 
     return image, even_label
+
+
+def toy_data():
+    x = np.linspace(-1, 1, 192)
+    x, y, z = np.meshgrid(x, x, x, indexing='ij')
+    r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
+
+    image = 1.0 - (0.9 < r) * (r < 0.94)
+    label = 2.0 * (r < 0.92) - 1.0
+
+    return image, label
 
 
 def main():
@@ -160,7 +170,7 @@ def main():
     print('init done', flush=True)
     opt_state = opt.init(params)
 
-    x_data, y_data = cerebellum(1)
+    x_data, y_data = toy_data()
     x_data = x_data[None]
     y_data = y_data[None]
 
@@ -171,7 +181,7 @@ def main():
             zi = np.random.randint(0, x.shape[3] - n + 1)
             x_patch = x[..., xi:xi + n, yi:yi + n, zi:zi + n]
             y_patch = y[..., xi:xi + n, yi:yi + n, zi:zi + n]
-            if np.sum(unpad(y_patch) == 1) > 0:
+            if np.sum(unpad(y_patch) == -1) > 0 and np.sum(unpad(y_patch) == 1) > 0:
                 return x_patch, y_patch
 
     print('start training (compiling)', flush=True)
