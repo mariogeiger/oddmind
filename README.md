@@ -25,3 +25,11 @@ git clone https://github.com/e3nn/e3nn-jax.git
 cd e3nn-jax
 python setup.py develop
 ```
+
+# Execute
+
+Make sure you execute the code on a computer with a GPU otherwise it will not even compile the code
+```
+# wandb login  # optional
+python unet_odd.py
+```
