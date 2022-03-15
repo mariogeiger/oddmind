@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add
+from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add, normalize_function
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -107,12 +107,13 @@ def model(x):
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul, ['0o', '1e', '2o'])
 
-    x = Convolution(x.irreps, Irreps(f'{16 * mul}x0o'), **kw)(x.contiguous)
+    x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)
 
-    for h in [16 * mul, 1]:
+    tanh = normalize_function(jnp.tanh)
+    for h in [16 * mul, 16 * mul, 1]:
         x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x).contiguous
-        x = jax.nn.tanh(x)
-        x = hk.Linear(h, with_bias=False)(x)
+        x = tanh(x)
+        x = hk.Linear(h, with_bias=False, w_init=hk.initializers.RandomNormal())(x) / jnp.sqrt(x.shape[-1])
 
     x = x[..., 0]
     return x
