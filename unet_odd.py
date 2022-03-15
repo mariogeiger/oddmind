@@ -1,4 +1,5 @@
 import pickle
+import time
 
 import haiku as hk
 import jax
@@ -233,12 +234,14 @@ def main():
 
     print('start training (compiling)', flush=True)
     for i in range(2000):
+        t = time.perf_counter()
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
         print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
         test_loss, test_accuracy = test_metrics(params, x_test, y_test)
-        print(f'     test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
+        print(f'{time.perf_counter() - t:.2f}s test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
         wandb.log({
+            'step_time': time.perf_counter() - t,
             'train_accuracy_left': train_accuracy[0],
             'train_accuracy_background': train_accuracy[1],
             'train_accuracy_right': train_accuracy[2],
