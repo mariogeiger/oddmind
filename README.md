@@ -1,4 +1,4 @@
-# oddmind
+# oddmind: learning chiral segmentation of the brain
 
 The aim is to train an equivariant neural network to segment the cerebelum in a brain.
 It has to distinguish between the left and right cerebellum.
@@ -12,9 +12,11 @@ The files `data/x1.nii.gz` and `data/x2.nii.gz` contain the MRI data of two brai
 The files `data/y1.nii.gz` and `data/y2.nii.gz` contain the labels of the two brains.
 We use the data with index 1 for training and index 2 for testing.
 
-# Setup
+## Setup
 
-To install the dependencies
+This project is based on the **last version** of [e3nn-jax](https://github.com/e3nn/e3nn-jax)!
+
+To install the dependencies:
 
 ```
 pip install --upgrade pip
@@ -27,7 +29,7 @@ cd e3nn-jax
 python setup.py develop
 ```
 
-# Execute
+## Execute
 
 Make sure you execute the code on a computer with a GPU otherwise it will not even compile the code
 ```
