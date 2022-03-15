@@ -260,7 +260,7 @@ def main():
         })
         if i == 8:
             jax.profiler.stop_trace()
-        if i % 10 == 0:
+        if i % 25 == 0:
             with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
                 pickle.dump(params, f)
 
