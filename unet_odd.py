@@ -25,7 +25,7 @@ def model(x):
     )
 
     def cbg(x, mul, ir_filter=None):
-        mul0, mul1, mul2 = 4 * mul, 2 * mul, mul
+        mul0, mul1, mul2 = round(4 * mul), round(2 * mul), round(mul)
         irreps_scalar = Irreps(f'{mul0}x0e + {mul0}x0o')
         irreps_gated = Irreps(f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o')
 
@@ -68,43 +68,44 @@ def model(x):
     mul = 3
 
     # Block A
-    x = cbg(x, mul)
-    x_a = x = cbg(x, mul)
+    x_a = x = cbg(x, mul, ['0e', '1o', '2e'])  # 0.005s
     x = down(x)
 
     # Block B
-    x = cbg(x, 2 * mul)
-    x_b = x = cbg(x, 2 * mul)
+    x = cbg(x, 2 * mul)       # 0.07s
+    x_b = x = cbg(x, 2 * mul) # 0.3s
     x = down(x)
 
     # Block C
-    x = cbg(x, 4 * mul)
-    x_c = x = cbg(x, 4 * mul)
+    x = cbg(x, 4 * mul)        # 0.07s
+    x = cbg(x, 4 * mul)        # 0.15s
+    x_c = x = cbg(x, 4 * mul)  # 0.15s
     x = down(x)
 
     # Block D
-    x = cbg(x, 8 * mul)
-    x = cbg(x, 8 * mul)
+    x = cbg(x, 8 * mul)  # 0.04s
+    x = cbg(x, 8 * mul)  # 0.09s
+    x = cbg(x, 8 * mul)  # 0.09s
 
     # Block E
     x = up(x)
     x = IrrepsData.cat([x, x_c])
-    x = cbg(x, 4 * mul)
-    x = cbg(x, 4 * mul)
+    x = cbg(x, 4 * mul)  # 0.45s
+    x = cbg(x, 4 * mul)  # 0.15s
+    x = cbg(x, 4 * mul)  # 0.15s
 
     # Block F
     x = up(x)
     x = IrrepsData.cat([x, x_b])
-    x = cbg(x, 2 * mul)
-    x = cbg(x, 2 * mul)
+    x = cbg(x, 2 * mul)  # 0.8s
+    x = cbg(x, 2 * mul)  # 0.3s
 
     # Block G
     x = up(x)
     x = IrrepsData.cat([x, x_a])
-    x = cbg(x, mul)
-    x = cbg(x, mul, ['0o', '1e', '2o'])  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
+    x = cbg(x, mul, ['0o', '1e', '2o'])  # 1.4s!
 
-    x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)
+    x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)  # 0.1s
 
     for h in [8 * mul, 1]:
         x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x).contiguous
@@ -234,6 +235,8 @@ def main():
 
     print('start training (compiling)', flush=True)
     for i in range(2000):
+        if i == 8:
+            jax.profiler.start_trace(wandb.run.dir)
         t = time.perf_counter()
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
@@ -253,6 +256,8 @@ def main():
             'test_accuracy_right': test_accuracy[2],
             'test_loss': test_loss,
         })
+        if i == 8:
+            jax.profiler.stop_trace()
         if i % 10 == 0:
             with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
                 pickle.dump(params, f)
