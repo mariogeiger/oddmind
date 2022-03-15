@@ -191,7 +191,6 @@ def main():
 
         loss, pred = loss_fn(params, x, y)
         assert pred.ndim == 1 + 3
-        pred = unpad(pred)
         return loss, accuracy(pred, y)
 
     np.set_printoptions(precision=2, suppress=True)
