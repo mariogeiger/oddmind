@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import wandb
 from e3nn_jax import BatchNorm, Gate, Irreps, IrrepsData, index_add
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
@@ -133,6 +134,8 @@ def cerebellum(i):
 
 
 def main():
+    wandb.init(project="oddmind")
+
     print('start script', flush=True)
     size = 128
 
@@ -205,6 +208,7 @@ def main():
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, loss, accuracy, pred = update(params, opt_state, x_patch, y_patch)
         print(f"[{i}] loss = {loss:.2e}  accuracy = {100 * accuracy}%  pred = [{pred.min():.2e}, {pred.max():.2e}]", flush=True)
+        wandb.log({'accuracy_background': accuracy[0], 'accuracy_thing': accuracy[2], 'loss': loss})
 
 
 if __name__ == "__main__":
