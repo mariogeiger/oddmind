@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import wandb
-from e3nn_jax import BatchNorm, Gate, Irreps, IrrepsData, index_add
+from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -20,11 +20,18 @@ def model(x):
         steps=(1.0, 1.0, 1.0)
     )
 
-    def cbg(x, mul):
+    def cbg(x, mul, ir_filter=None):
         mul0, mul1, mul2 = 4 * mul, 2 * mul, mul
+        irreps_scalar = Irreps(f'{mul0}x0e + {mul0}x0o')
+        irreps_gated = Irreps(f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o')
+
+        if ir_filter:
+            irreps_scalar = irreps_scalar.filter(ir_filter)
+            irreps_gated = irreps_gated.filter(ir_filter)
+
         gate = Gate(
-            f'{mul0}x0e + {mul0}x0o', [jax.nn.gelu, jnp.tanh],
-            f'{2 * mul1 + 2 * mul2}x0e', [jax.nn.sigmoid], f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o',
+            irreps_scalar, [{Irrep('0e'): jax.nn.gelu, Irrep('0o'): jnp.tanh}[ir] for _, ir in irreps_scalar],
+            f'{irreps_gated.num_irreps}x0e', [jax.nn.sigmoid], irreps_gated,
         )
         for _ in range(1 + 3):  # vectorize for axies [batch, x, y, z]
             gate = jax.vmap(gate)
@@ -91,7 +98,7 @@ def model(x):
     x = up(x)
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul)
-    x = cbg(x, mul)  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
+    x = cbg(x, mul, ['0e', '1o', '2e'])  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
 
     x = Convolution(x.irreps, Irreps(f'{8 * mul}x0e'), **kw)(x.contiguous)
 
@@ -133,15 +140,38 @@ def cerebellum(i):
     return image, even_label
 
 
+def unpad(z):
+    n = 8
+    return z[..., n:-n, n:-n, n:-n]
+
+
+def accuracy(pred, y):
+    pred = pred.ravel()
+    y = y.ravel()
+    a = jnp.sign(jnp.round(pred)) == y
+    i = jnp.asarray(y + 1, jnp.int32)
+    correct = index_add(i, a, 3)
+    total = index_add(i, jnp.ones_like(a), 3)
+    accuracy = correct / total
+    return accuracy
+
+
+def loss_fn(params, x, y):
+    pred = model.apply(params, x)
+    assert pred.ndim == 1 + 3
+    pred = unpad(pred)
+    absy = jnp.abs(y)
+    loss = absy * jnp.log(1.0 + jnp.exp(-pred * y))
+    loss = loss + (1.0 - absy) * jnp.square(pred)
+    loss = jnp.mean(loss)
+    return loss, pred
+
+
 def main():
     wandb.init(project="oddmind")
 
     print('start script', flush=True)
     size = 128
-
-    def unpad(z):
-        n = 8
-        return z[..., n:-n, n:-n, n:-n]
 
     # Optimizer
     learning_rate = 5e-3
@@ -155,30 +185,23 @@ def main():
 
         y = unpad(y)
 
-        def loss_fn(params):
-            pred = model.apply(params, x)
-            assert pred.ndim == 1 + 3
-            pred = unpad(pred)
-            absy = jnp.abs(y)
-            loss = absy * jnp.log(1.0 + jnp.exp(-pred * y))
-            loss = loss + (1.0 - absy) * jnp.square(pred)
-            loss = jnp.mean(loss)
-            return loss, pred
-
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, pred), grads = grad_fn(params)
-
-        pred = pred.ravel()
-        y = y.ravel()
-        a = jnp.sign(jnp.round(pred)) == y
-        i = jnp.asarray(y + 1, jnp.int32)
-        correct = index_add(i, a, 3)
-        total = index_add(i, jnp.ones_like(a), 3)
-        accuracy = correct / total
+        (loss, pred), grads = grad_fn(params, x, y)
 
         updates, opt_state = opt.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, loss, accuracy, pred
+        return params, opt_state, loss, accuracy(pred, y), pred
+
+    @jax.jit
+    def test_metrics(params, x, y):
+        assert x.ndim == 1 + 3
+        assert y.ndim == 1 + 3
+
+        y = unpad(y)
+
+        loss, pred = loss_fn(params, x, y)
+        assert pred.ndim == 1 + 3
+        return loss, accuracy(pred, y)
 
     np.set_printoptions(precision=2, suppress=True)
 
@@ -203,12 +226,28 @@ def main():
             if np.sum(unpad(y_patch) == -1) > 0 and np.sum(unpad(y_patch) == 1) > 0:
                 return x_patch, y_patch
 
+    x_test, y_test = cerebellum(2)
+    assert x_test.shape == (256, 256, 160)
+    x_test = x_test[None, 16:16+128, 42:42+128, 80-64:80+64]
+    y_test = y_test[None, 16:16+128, 42:42+128, 80-64:80+64]
+
     print('start training (compiling)', flush=True)
     for i in range(2000):
         x_patch, y_patch = random_patch(x_data, y_data, size)
-        params, opt_state, loss, accuracy, pred = update(params, opt_state, x_patch, y_patch)
-        print(f"[{i}] loss = {loss:.2e}  accuracy = {100 * accuracy}%  pred = [{pred.min():.2e}, {pred.max():.2e}]", flush=True)
-        wandb.log({'accuracy_background': accuracy[0], 'accuracy_thing': accuracy[2], 'loss': loss})
+        params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
+        print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
+        test_loss, test_accuracy = test_metrics(params, x_test, y_test)
+        print(f'     test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
+        wandb.log({
+            'train_accuracy_background': train_accuracy[0],
+            'train_accuracy_cerebellum': train_accuracy[2],
+            'train_loss': train_loss,
+            'train_pred_min': np.min(train_pred),
+            'train_pred_max': np.max(train_pred),
+            'test_accuracy_background': test_accuracy[0],
+            'test_accuracy_cerebellum': test_accuracy[2],
+            'test_loss': test_loss,
+        })
 
 
 if __name__ == "__main__":
