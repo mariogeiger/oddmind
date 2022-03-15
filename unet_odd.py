@@ -1,12 +1,15 @@
+import pickle
+
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import wandb
 from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
+
+import wandb
 
 
 # Model
@@ -123,18 +126,18 @@ def cerebellum(i):
     image = image.get_fdata() / 600
     label = label.get_fdata()
 
-    odd_label = np.zeros_like(label)
+    curated_label = np.zeros_like(label)
 
     # left cerebellum:
-    odd_label[label == 6] = -1
-    odd_label[label == 7] = -1
-    odd_label[label == 8] = -1
+    curated_label[label == 6] = -1
+    curated_label[label == 7] = -1
+    curated_label[label == 8] = -1
     # right cerebellum:
-    odd_label[label == 45] = 1
-    odd_label[label == 46] = 1
-    odd_label[label == 47] = 1
+    curated_label[label == 45] = 1
+    curated_label[label == 46] = 1
+    curated_label[label == 47] = 1
 
-    return image, odd_label
+    return image, curated_label
 
 
 def unpad(z):
@@ -247,6 +250,9 @@ def main():
             'test_accuracy_right': test_accuracy[2],
             'test_loss': test_loss,
         })
+        if i % 10 == 0:
+            with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
+                pickle.dump(params, f)
 
 
 if __name__ == "__main__":
