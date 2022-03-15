@@ -15,7 +15,7 @@ def model(x):
     kw = dict(
         irreps_sh=Irreps('0e + 1o + 2e'),
         diameter=5.0,
-        num_radial_basis=5,
+        num_radial_basis=2,
         steps=(1.0, 1.0, 1.0)
     )
 
@@ -130,17 +130,6 @@ def cerebellum(i):
     even_label[label == 47] = 1
 
     return image, even_label
-
-
-def toy_data():
-    x = np.linspace(-1, 1, 192)
-    x, y, z = np.meshgrid(x, x, x, indexing='ij')
-    r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
-
-    image = 1.0 - (0.9 < r) * (r < 0.94)
-    label = 2.0 * (r < 0.92) - 1.0
-
-    return image, label
 
 
 def main():
