@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import wandb
-from e3nn_jax import BatchNorm, Gate, Irreps, IrrepsData, index_add
+from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -20,11 +20,18 @@ def model(x):
         steps=(1.0, 1.0, 1.0)
     )
 
-    def cbg(x, mul):
+    def cbg(x, mul, ir_filter=None):
         mul0, mul1, mul2 = 4 * mul, 2 * mul, mul
+        irreps_scalar = Irreps(f'{mul0}x0e + {mul0}x0o')
+        irreps_gated = Irreps(f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o')
+
+        if ir_filter:
+            irreps_scalar = irreps_scalar.filter(ir_filter)
+            irreps_gated = irreps_gated.filter(ir_filter)
+
         gate = Gate(
-            f'{mul0}x0e + {mul0}x0o', [jax.nn.gelu, jnp.tanh],
-            f'{2 * mul1 + 2 * mul2}x0e', [jax.nn.sigmoid], f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o',
+            irreps_scalar, [{Irrep('0e'): jax.nn.gelu, Irrep('0o'): jnp.tanh}[ir] for _, ir in irreps_scalar],
+            f'{irreps_gated.num_irreps}x0e', [jax.nn.sigmoid], irreps_gated,
         )
         for _ in range(1 + 3):  # vectorize for axies [batch, x, y, z]
             gate = jax.vmap(gate)
@@ -91,12 +98,12 @@ def model(x):
     x = up(x)
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul)
-    x = cbg(x, mul)  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
+    x = cbg(x, mul, ['0o', '1e', '2o'])  # dim = 4 * mul + 2 * 3 * mul + 5 * mul = 15 * mul
 
     x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)
 
     for h in [8 * mul, 1]:
-        x = hk.InstanceNorm(create_scale=True, create_offset=False, data_format="N...C")(x)
+        x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x)
         x = jax.nn.tanh(x)
         x = hk.Linear(h, with_bias=False)(x)
 
@@ -225,7 +232,9 @@ def main():
     for i in range(2000):
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
+        print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
         test_loss, test_accuracy = test_metrics(params, x_test, y_test)
+        print(f'     test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
         wandb.log({
             'train_accuracy_left': train_accuracy[0],
             'train_accuracy_background': train_accuracy[1],
