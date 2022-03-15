@@ -103,7 +103,7 @@ def model(x):
     x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)
 
     for h in [8 * mul, 1]:
-        x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x)
+        x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x).contiguous
         x = jax.nn.tanh(x)
         x = hk.Linear(h, with_bias=False)(x)
 
