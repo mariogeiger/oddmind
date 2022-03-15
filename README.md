@@ -8,8 +8,9 @@ Zero for the background, one for the left and minus one for the right.
 ## Dataset
 
 We took two brains from the [Mindboggle](https://mindboggle.info/) dataset.
-The files `x1.nii.gz` and `x2.nii.gz` contain the MRI data of two brains.
-The files `y1.nii.gz` and `y2.nii.gz` contain the labels of the two brains.
+The files `data/x1.nii.gz` and `data/x2.nii.gz` contain the MRI data of two brains.
+The files `data/y1.nii.gz` and `data/y2.nii.gz` contain the labels of the two brains.
+We use the data with index 1 for training and index 2 for testing.
 
 # Setup
 

@@ -114,8 +114,8 @@ def model(x):
 def cerebellum(i):
     import nibabel as nib
 
-    image = nib.load(f'x{i}.nii.gz')
-    label = nib.load(f'y{i}.nii.gz')
+    image = nib.load(f'data/x{i}.nii.gz')
+    label = nib.load(f'data/y{i}.nii.gz')
 
     assert (image.affine == label.affine).all()
     assert image.header.get_zooms() == (1, 1, 1)
