@@ -4,9 +4,11 @@ import time
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add, normalize_function
+from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add,
+                      normalize_function)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -120,8 +122,6 @@ def model(x):
 
 
 def cerebellum(i):
-    import nibabel as nib
-
     image = nib.load(f'data/x{i}.nii.gz')
     label = nib.load(f'data/y{i}.nii.gz')
 
@@ -164,10 +164,11 @@ def accuracy(pred, y):
 def loss_fn(params, x, y):
     pred = model.apply(params, x)
     assert pred.ndim == 1 + 3
-    pred = unpad(pred)
+    p = unpad(pred)
+    y = unpad(y)
     absy = jnp.abs(y)
-    loss = absy * jnp.log(1.0 + jnp.exp(-pred * y))
-    loss = loss + (1.0 - absy) * jnp.square(pred)
+    loss = absy * jnp.log(1.0 + jnp.exp(-p * y))
+    loss = loss + (1.0 - absy) * jnp.square(p)
     loss = jnp.mean(loss)
     return loss, pred
 
@@ -188,8 +189,6 @@ def main():
         assert x.ndim == 1 + 3
         assert y.ndim == 1 + 3
 
-        y = unpad(y)
-
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, pred), grads = grad_fn(params, x, y)
 
@@ -202,11 +201,9 @@ def main():
         assert x.ndim == 1 + 3
         assert y.ndim == 1 + 3
 
-        y = unpad(y)
-
         loss, pred = loss_fn(params, x, y)
         assert pred.ndim == 1 + 3
-        return loss, accuracy(pred, y)
+        return loss, accuracy(pred, y), pred
 
     np.set_printoptions(precision=2, suppress=True)
 
@@ -244,7 +241,7 @@ def main():
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
         print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
-        test_loss, test_accuracy = test_metrics(params, x_test, y_test)
+        test_loss, test_accuracy, test_pred = test_metrics(params, x_test, y_test)
         print(f'{time.perf_counter() - t:.2f}s test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
         wandb.log({
             'step_time': time.perf_counter() - t,
@@ -261,9 +258,18 @@ def main():
         })
         if i == 8:
             jax.profiler.stop_trace()
-        if i % 25 == 0:
+        if i % 50 == 0:
             with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
                 pickle.dump(params, f)
+
+            test_pred = test_pred[0]
+            test_pred[test_pred == -1] = 6
+            test_pred[test_pred == 1] = 45
+            test_pred = np.array(test_pred, dtype=np.float64)
+
+            orig = nib.load('data/y2.nii.gz')
+            img = nib.Nifti1Image(test_pred, orig.affine, orig.header)
+            nib.save(img, f'{wandb.run.dir}/p2.{i:04d}.nii.gz')
 
 
 if __name__ == "__main__":
