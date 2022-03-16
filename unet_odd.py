@@ -7,8 +7,8 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, index_add,
-                      normalize_function)
+from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, Linear,
+                      ScalarActivation, index_add)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -42,8 +42,8 @@ def model(x):
         for _ in range(1 + 3):  # vectorize for axies [batch, x, y, z]
             gate = jax.vmap(gate)
 
-        x = Convolution(x.irreps, gate.irreps_in, **kw)(x.contiguous)
-        x = BatchNorm(irreps=gate.irreps_in, instance=True)(x)
+        x = Convolution(gate.irreps_in, **kw)(x)
+        x = BatchNorm(instance=True)(x)
         x = gate(x)
         return x
 
@@ -64,8 +64,8 @@ def model(x):
         z2 = jax.vmap(z1, -1, -1)
         return IrrepsData(x.irreps, z1(x.contiguous), jax.tree_map(z2, x.list))
 
-    x = x[..., None]
-    x = IrrepsData.from_contiguous("0e", x)
+    # Convert to IrrepsData
+    x = IrrepsData.from_contiguous("0e", x[..., None])
 
     mul = 3
 
@@ -109,16 +109,14 @@ def model(x):
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul, ['0o', '1e', '2o'])
 
-    x = Convolution(x.irreps, Irreps(f'{8 * mul}x0o'), **kw)(x.contiguous)
+    x = Convolution(f'{8 * mul}x0o', **kw)(x)
 
-    tanh = normalize_function(jnp.tanh)
     for h in [16 * mul, 16 * mul, 1]:
-        x = BatchNorm(irreps=f"{x.shape[-1]}x0o", instance=True)(x).contiguous
-        x = tanh(x)
-        x = hk.Linear(h, with_bias=False, w_init=hk.initializers.RandomNormal())(x) / jnp.sqrt(x.shape[-1])
+        x = BatchNorm(instance=True)(x)
+        x = ScalarActivation(x.irreps, [jnp.tanh])(x)
+        x = Linear(f'{h}x0o')(x)
 
-    x = x[..., 0]
-    return x
+    return x.contiguous[..., 0]  # Back from IrrepsData to jnp.array
 
 
 def cerebellum(i):
