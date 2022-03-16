@@ -40,7 +40,7 @@ def model(x):
             gate = jax.vmap(gate)
 
         x = Convolution(x.irreps, gate.irreps_in, **kw)(x.contiguous)
-        x = BatchNorm(gate.irreps_in, instance=True)(x)
+        x = BatchNorm(irreps=gate.irreps_in, instance=True)(x)
         x = gate(x)
         return x
 

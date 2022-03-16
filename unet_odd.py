@@ -43,7 +43,7 @@ def model(x):
             gate = jax.vmap(gate)
 
         x = Convolution(x.irreps, gate.irreps_in, **kw)(x.contiguous)
-        x = BatchNorm(gate.irreps_in, instance=True)(x)
+        x = BatchNorm(irreps=gate.irreps_in, instance=True)(x)
         x = gate(x)
         return x
 
@@ -113,7 +113,7 @@ def model(x):
 
     tanh = normalize_function(jnp.tanh)
     for h in [16 * mul, 16 * mul, 1]:
-        x = BatchNorm(f"{x.shape[-1]}x0o", instance=True)(x).contiguous
+        x = BatchNorm(irreps=f"{x.shape[-1]}x0o", instance=True)(x).contiguous
         x = tanh(x)
         x = hk.Linear(h, with_bias=False, w_init=hk.initializers.RandomNormal())(x) / jnp.sqrt(x.shape[-1])
 
