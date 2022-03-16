@@ -262,10 +262,10 @@ def main():
             with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
                 pickle.dump(params, f)
 
-            test_pred = test_pred[0]
+            test_pred = np.array(test_pred[0], dtype=np.float64)
+            test_pred = np.sign(np.round(test_pred))
             test_pred[test_pred == -1] = 6
             test_pred[test_pred == 1] = 45
-            test_pred = np.array(test_pred, dtype=np.float64)
 
             orig = nib.load('data/y2.nii.gz')
             img = nib.Nifti1Image(test_pred, orig.affine, orig.header)
