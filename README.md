@@ -1,6 +1,6 @@
 # oddmind: learning chiral segmentation of the brain
 
-The aim is to train an equivariant neural network to segment the cerebelum in a brain.
+The aim is to train an equivariant neural network to segment the cerebellum in a brain.
 It has to distinguish between the left and right cerebellum.
 To do so we output an odd scalar value for each voxel.
 Zero for the background, one for the left and minus one for the right.
@@ -36,3 +36,8 @@ Make sure you execute the code on a computer with a GPU otherwise it will not ev
 # wandb login  # optional
 python unet_odd.py
 ```
+
+## Results
+Prediction of the cerebellum on a test brain (`data/x2.nii.gz`) made by an O(3)-equivariant network trained during 2000 steps (8 hours on a Tesla V100 PCIe 32GB) on a single brain (`data/x1.nii.gz`).
+
+![Peek 2022-03-17 00-03](https://user-images.githubusercontent.com/333780/158734792-731a2861-2e6e-494c-938d-5239097d6133.gif)
