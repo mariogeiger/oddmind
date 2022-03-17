@@ -1,3 +1,4 @@
+![Peek 2022-03-17 00-21](https://user-images.githubusercontent.com/333780/158736611-87eae726-c7d2-4d10-868d-34e6305740a2.gif)
 # oddmind: learning chiral segmentation of the brain
 
 The aim is to train an equivariant neural network to segment the cerebellum in a brain.
