@@ -244,9 +244,11 @@ def main():
         t = time.perf_counter()
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
-        print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
+        train_loss.block_until_ready()
+        print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy} time train: {time.perf_counter() - t:.2f}s', flush=True)
         test_loss, test_accuracy, test_pred = test_metrics(params, x_test, y_test)
-        print(f'{time.perf_counter() - t:.2f}s test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
+        test_loss.block_until_ready()
+        print(f'test loss: {test_loss:.2f} test accuracy: {test_accuracy} time train+val: {time.perf_counter() - t:.2f}s', flush=True)
         wandb.log({
             'step_time': time.perf_counter() - t,
             'train_accuracy_left': train_accuracy[0],
