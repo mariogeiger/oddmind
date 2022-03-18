@@ -10,7 +10,7 @@ import optax
 from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, Linear,
                       index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
-from e3nn_jax.experimental.voxel_pooling import zoom, maxpool
+from e3nn_jax.experimental.voxel_pooling import zoom
 
 import wandb
 
