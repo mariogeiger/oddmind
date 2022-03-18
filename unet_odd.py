@@ -8,11 +8,17 @@ import nibabel as nib
 import numpy as np
 import optax
 from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, Linear,
-                      ScalarActivation, index_add)
+                      index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
 import wandb
+
+
+def n_vmap(n, fun):
+    for _ in range(n):
+        fun = jax.vmap(fun)
+    return fun
 
 
 # Model
@@ -39,8 +45,7 @@ def model(x):
             irreps_scalar, [{Irrep('0e'): jax.nn.gelu, Irrep('0o'): jnp.tanh}[ir] for _, ir in irreps_scalar],
             f'{irreps_gated.num_irreps}x0e', [jax.nn.sigmoid], irreps_gated,
         )
-        for _ in range(1 + 3):  # vectorize for axies [batch, x, y, z]
-            gate = jax.vmap(gate)
+        gate = n_vmap(1 + 3, gate)  # vectorize for axies [batch, x, y, z]
 
         x = Convolution(gate.irreps_in, **kw)(x)
         x = BatchNorm(instance=True)(x)
@@ -49,10 +54,11 @@ def model(x):
 
     def down(x):  # TODO replace by pool max
         def pool(x):
+            ones = (1,) * (x.ndim - 4)
             return hk.avg_pool(
                 x,
-                window_shape=(1, 2, 2, 2, 1),
-                strides=(1, 2, 2, 2, 1),
+                window_shape=(1, 2, 2, 2) + ones,
+                strides=(1, 2, 2, 2) + ones,
                 padding='SAME',
             )
         return jax.tree_map(pool, x)
@@ -109,12 +115,12 @@ def model(x):
     x = IrrepsData.cat([x, x_a])
     x = cbg(x, mul, ['0o', '1e', '2o'])
 
-    x = Convolution(f'{8 * mul}x0o', **kw)(x)
+    x = Convolution(f'{round(8 * mul)}x0o', **kw)(x)
 
-    for h in [16 * mul, 16 * mul, 1]:
+    for h in [round(16 * mul), round(16 * mul), 1]:
         x = BatchNorm(instance=True)(x)
-        x = ScalarActivation(x.irreps, [jnp.tanh])(x)
-        x = Linear(f'{h}x0o')(x)
+        x = scalar_activation(x, [jnp.tanh])
+        x = n_vmap(1 + 3, Linear(f'{h}x0o'))(x)
 
     return x.contiguous[..., 0]  # Back from IrrepsData to jnp.array
 
