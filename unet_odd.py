@@ -10,7 +10,7 @@ import optax
 from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, Linear,
                       index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
-from e3nn_jax.experimental.voxel_pooling import zoom
+from e3nn_jax.experimental.voxel_pooling import zoom, maxpool
 
 import wandb
 
@@ -52,16 +52,17 @@ def model(x):
         x = gate(x)
         return x
 
-    def down(x):  # TODO replace by pool max
-        def pool(x):
-            ones = (1,) * (x.ndim - 4)
-            return hk.avg_pool(
-                x,
-                window_shape=(1, 2, 2, 2) + ones,
-                strides=(1, 2, 2, 2) + ones,
-                padding='SAME',
-            )
-        return jax.tree_map(pool, x)
+    # def down(x):  # TODO replace by pool max
+    #     def pool(x):
+    #         ones = (1,) * (x.ndim - 4)
+    #         return hk.avg_pool(
+    #             x,
+    #             window_shape=(1, 2, 2, 2) + ones,
+    #             strides=(1, 2, 2, 2) + ones,
+    #             padding='SAME',
+    #         )
+    #     return jax.tree_map(pool, x)
+    down = jax.vmap(lambda x: maxpool(x, (2, 2, 2)))
 
     def up(x):
         def z0(x):
