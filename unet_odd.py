@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, Gate, Irrep, Irreps, IrrepsData, Linear,
+from e3nn_jax import (BatchNorm, gate, Irrep, Irreps, IrrepsData, Linear,
                       index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
@@ -41,15 +41,9 @@ def model(x):
             irreps_scalar = irreps_scalar.filter(ir_filter)
             irreps_gated = irreps_gated.filter(ir_filter)
 
-        gate = Gate(
-            irreps_scalar, [{Irrep('0e'): jax.nn.gelu, Irrep('0o'): jnp.tanh}[ir] for _, ir in irreps_scalar],
-            f'{irreps_gated.num_irreps}x0e', [jax.nn.sigmoid], irreps_gated,
-        )
-        gate = n_vmap(1 + 3, gate)  # vectorize for axies [batch, x, y, z]
-
-        x = Convolution(gate.irreps_in, **kw)(x)
+        x = Convolution(irreps_scalar + Irreps(f'{irreps_gated.num_irreps}x0e') + irreps_gated, **kw)(x)
         x = BatchNorm(instance=True)(x)
-        x = gate(x)
+        x = n_vmap(1 + 3, lambda x: gate(x, [{Irrep('0e'): jax.nn.gelu, Irrep('0o'): jnp.tanh}[ir] for _, ir in irreps_scalar] + [jax.nn.sigmoid]))(x)
         return x
 
     def down(x):  # TODO replace by pool max
