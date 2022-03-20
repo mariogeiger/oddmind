@@ -36,7 +36,11 @@ class MixChannels(hk.Module):
         lin = jax.vmap(lin, (0, 0), 0)  # input channel
 
         w = [
-            hk.get_parameter(f'w[{ins.i_in},{ins.i_out}] {lin.irreps_in[ins.i_in]},{lin.irreps_out[ins.i_out]}', shape=ins.path_shape, init=hk.initializers.RandomNormal())
+            hk.get_parameter(
+                f'w[{ins.i_in},{ins.i_out}] {lin.irreps_in[ins.i_in]},{lin.irreps_out[ins.i_out]}',
+                shape=(input_size, self.output_size) + ins.path_shape,
+                init=hk.initializers.RandomNormal()
+            )
             for ins in lin.instructions
         ]
         w = jax.tree_map(lambda x: x / input_size**0.5, w)
