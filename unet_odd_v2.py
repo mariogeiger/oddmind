@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, gate, Irrep, Irreps, IrrepsData, Linear,
+from e3nn_jax import (BatchNorm, gate, Irrep, Irreps, IrrepsData, Linear, FunctionalLinear,
                       index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
@@ -23,18 +23,25 @@ def n_vmap(n, fun):
 
 
 class MixChannels(hk.Module):
-    def __init__(self, output_size: int):
+    def __init__(self, output_size: int, output_irreps: Irreps):
         super().__init__()
         self.output_size = output_size
+        self.output_irreps = Irreps(output_irreps)
 
     def __call__(self, input: IrrepsData) -> IrrepsData:
         input_size = input.shape[-1]
 
-        w = hk.get_parameter("w", [input_size, self.output_size], init=hk.initializers.RandomNormal())
-        w = w / input_size**0.5
+        lin = FunctionalLinear(input.irreps, self.output_irreps)
+        lin = jax.vmap(lin, (0, None), 0)  # output channel
+        lin = jax.vmap(lin, (0, 0), 0)  # input channel
 
-        x = jnp.einsum('...ik,ij->...jk', input.contiguous, w)
-        return IrrepsData.from_contiguous(input.irreps, x)
+        w = [
+            hk.get_parameter(f'w[{ins.i_in},{ins.i_out}] {lin.irreps_in[ins.i_in]},{lin.irreps_out[ins.i_out]}', shape=ins.path_shape, init=hk.initializers.RandomNormal())
+            for ins in lin.instructions
+        ]
+        w = jax.tree_map(lambda x: x / input_size**0.5, w)
+
+        return lin(w, input)
 
 
 # Model
@@ -56,20 +63,22 @@ def model(x):
     def cbg(x, mul):
         assert len(x.shape) == 1 + 3 + 1  # (batch, x, y, z, channel)
 
+        irreps = Irreps("4x0e + 4x0o + 6x0e + 2x1e + 2x1o + 2e + 2o")
+
         # Linear
-        x = MixChannels(mul)(x)
+        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = scalar_activation(x, [activations[ir] for _, ir in x.irreps])
+        x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
 
         # Convolution
-        x = jax.vmap(Convolution("4x0e + 4x0o + 6x0e + 2x1e + 2x1o + 2e + 2o", **kw), 4, 4)(x)
+        x = jax.vmap(Convolution(irreps, **kw), 4, 4)(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
 
         # Linear
-        x = MixChannels(mul)(x)
+        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = scalar_activation(x, [activations[ir] for _, ir in x.irreps])
+        x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
 
         return x
 
@@ -96,7 +105,7 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None, None])  # [batch, x, y, z, channel, irreps]
 
-    mul = 3
+    mul = 8
 
     # Block A
     x = cbg(x, mul)
@@ -260,30 +269,33 @@ def main():
 
     print('start training (compiling)', flush=True)
     for i in range(2000):
-        if i == 8:
+        if i == 20:
             jax.profiler.start_trace(wandb.run.dir)
         t = time.perf_counter()
         x_patch, y_patch = random_patch(x_data, y_data, size)
         params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, x_patch, y_patch)
         train_loss.block_until_ready()
         print(f'{i:04d} train loss: {train_loss:.2f} train accuracy: {train_accuracy} time train: {time.perf_counter() - t:.2f}s', flush=True)
-        test_loss, test_accuracy, test_pred = test_metrics(params, x_test, y_test)
-        test_loss.block_until_ready()
-        print(f'test loss: {test_loss:.2f} test accuracy: {test_accuracy} time train+val: {time.perf_counter() - t:.2f}s', flush=True)
-        wandb.log({
-            'step_time': time.perf_counter() - t,
-            'train_accuracy_left': train_accuracy[0],
-            'train_accuracy_background': train_accuracy[1],
-            'train_accuracy_right': train_accuracy[2],
-            'train_loss': train_loss,
-            'train_pred_min': np.min(train_pred),
-            'train_pred_max': np.max(train_pred),
-            'test_accuracy_left': test_accuracy[0],
-            'test_accuracy_background': test_accuracy[1],
-            'test_accuracy_right': test_accuracy[2],
-            'test_loss': test_loss,
-        })
-        if i == 8:
+
+        if i % 10 == 0:
+            test_loss, test_accuracy, test_pred = test_metrics(params, x_test, y_test)
+            test_loss.block_until_ready()
+            print(f'test loss: {test_loss:.2f} test accuracy: {test_accuracy} time train+val: {time.perf_counter() - t:.2f}s', flush=True)
+            wandb.log({
+                'step_time': time.perf_counter() - t,
+                'train_accuracy_left': train_accuracy[0],
+                'train_accuracy_background': train_accuracy[1],
+                'train_accuracy_right': train_accuracy[2],
+                'train_loss': train_loss,
+                'train_pred_min': np.min(train_pred),
+                'train_pred_max': np.max(train_pred),
+                'test_accuracy_left': test_accuracy[0],
+                'test_accuracy_background': test_accuracy[1],
+                'test_accuracy_right': test_accuracy[2],
+                'test_loss': test_loss,
+            })
+
+        if i == 20:
             jax.profiler.stop_trace()
         if i % 50 == 0:
             with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
