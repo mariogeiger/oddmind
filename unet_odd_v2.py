@@ -29,13 +29,12 @@ class MixChannels(hk.Module):
         self.output_irreps = Irreps(output_irreps)
 
     def __call__(self, input: IrrepsData) -> IrrepsData:
+        assert len(input.shape) == 1
         input_size = input.shape[-1]
 
         lin = FunctionalLinear(input.irreps, self.output_irreps)
-        lin = jax.vmap(lin, (0, None), 0)  # output channel
-        lin = jax.vmap(lin, (0, 0), 0)  # input channel
 
-        w = [
+        ws = [
             hk.get_parameter(
                 f'w[{ins.i_in},{ins.i_out}] {lin.irreps_in[ins.i_in]},{lin.irreps_out[ins.i_out]}',
                 shape=(input_size, self.output_size) + ins.path_shape,
@@ -43,11 +42,19 @@ class MixChannels(hk.Module):
             )
             for ins in lin.instructions
         ]
-        w = jax.tree_map(lambda x: x / input_size**0.5, w)
+        ws = jax.tree_map(lambda x: x / input_size**0.5, ws)
 
-        output = lin(w, input)
-        output = jax.tree_map(lambda x: jnp.sum(x, axis=0), output)
-        return output
+        paths = [
+            ins.path_weight * w
+            if ins.i_in == -1 else
+            (
+                None
+                if input.list[ins.i_in] is None else
+                ins.path_weight * jnp.einsum("stuw,sui->twi", w, input.list[ins.i_in])
+            )
+            for ins, w in zip(lin.instructions, ws)
+        ]
+        return lin.aggregate_paths(paths, (self.output_size,))
 
 
 # Model
@@ -111,7 +118,7 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None, None])  # [batch, x, y, z, channel, irreps]
 
-    mul = 8
+    mul = 4
 
     # Block A
     x = cbg(x, mul)
