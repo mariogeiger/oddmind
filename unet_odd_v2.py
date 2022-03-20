@@ -119,19 +119,19 @@ def model(x):
 
     # Block E
     x = up(x)
-    x = IrrepsData.cat([x, x_c])
+    x = IrrepsData.cat([x, x_c], axis=-1)
     x = cbg(x, 4 * mul)
     x = cbg(x, 4 * mul)
 
     # Block F
     x = up(x)
-    x = IrrepsData.cat([x, x_b])
+    x = IrrepsData.cat([x, x_b], axis=-1)
     x = cbg(x, 2 * mul)
     x = cbg(x, 2 * mul)
 
     # Block G
     x = up(x)
-    x = IrrepsData.cat([x, x_a])
+    x = IrrepsData.cat([x, x_a], axis=-1)
     x = cbg(x, mul)
 
     x = jax.vmap(Convolution('8x0o', **kw), 4, 4)(x)
