@@ -41,7 +41,9 @@ class MixChannels(hk.Module):
         ]
         w = jax.tree_map(lambda x: x / input_size**0.5, w)
 
-        return lin(w, input)
+        output = lin(w, input)
+        output = jax.tree_map(lambda x: jnp.sum(x, axis=0), output)
+        return output
 
 
 # Model
