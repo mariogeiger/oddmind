@@ -114,7 +114,7 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None, None])  # [batch, x, y, z, channel, irreps]
 
-    mul = 4
+    mul = 2
 
     # Block A
     x = cbg(x, mul)
@@ -122,30 +122,30 @@ def model(x):
     x = down(x)
 
     # Block B
-    x = cbg(x, 2 * mul)
-    x_b = x = cbg(x, 2 * mul)
+    x = cbg(x, 3 * mul)
+    x_b = x = cbg(x, 3 * mul)
     x = down(x)
 
     # Block C
-    x = cbg(x, 4 * mul)
-    x_c = x = cbg(x, 4 * mul)
+    x = cbg(x, 6 * mul)
+    x_c = x = cbg(x, 6 * mul)
     x = down(x)
 
     # Block D
-    x = cbg(x, 8 * mul)
-    x = cbg(x, 8 * mul)
+    x = cbg(x, 10 * mul)
+    x = cbg(x, 10 * mul)
 
     # Block E
     x = up(x)
     x = IrrepsData.cat([x, x_c], axis=-1)
-    x = cbg(x, 4 * mul)
-    x = cbg(x, 4 * mul)
+    x = cbg(x, 6 * mul)
+    x = cbg(x, 6 * mul)
 
     # Block F
     x = up(x)
     x = IrrepsData.cat([x, x_b], axis=-1)
-    x = cbg(x, 2 * mul)
-    x = cbg(x, 2 * mul)
+    x = cbg(x, 3 * mul)
+    x = cbg(x, mul)
 
     # Block G
     x = up(x)
