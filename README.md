@@ -15,7 +15,7 @@ We use the data with index 1 for training and index 2 for testing.
 
 ## Setup
 
-This project is based on the **last version** of [e3nn-jax](https://github.com/e3nn/e3nn-jax)!
+This project is based on [e3nn-jax](https://github.com/e3nn/e3nn-jax).
 
 To install the dependencies:
 
@@ -25,9 +25,7 @@ pip install --upgrade nibabel
 pip install --upgrade "jax[cpu]"  # change this to get cuda support!
 pip install --upgrade dm-haiku
 pip install --upgrade optax
-git clone https://github.com/e3nn/e3nn-jax.git
-cd e3nn-jax
-python setup.py develop
+pip install e3nn-jax==0.4.0  # last version tested
 ```
 
 ## Execute
