@@ -1,5 +1,6 @@
 import pickle
 import time
+from collections import defaultdict
 
 import haiku as hk
 import jax
@@ -7,11 +8,10 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, gate, Irrep, Irreps, IrrepsData, Linear, FunctionalLinear,
-                      index_add, scalar_activation)
+from e3nn_jax import (BatchNorm, FunctionalLinear, Irrep, Irreps, IrrepsData,
+                      Linear, gate, index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
-from collections import defaultdict
 
 import wandb
 
@@ -45,13 +45,9 @@ class MixChannels(hk.Module):
         ws = jax.tree_map(lambda x: x / input_size**0.5, ws)
 
         paths = [
-            ins.path_weight * w
-            if ins.i_in == -1 else
-            (
-                None
-                if input.list[ins.i_in] is None else
-                ins.path_weight * jnp.einsum("stuw,sui->twi", w, input.list[ins.i_in])
-            )
+            None
+            if input.list[ins.i_in] is None else
+            ins.path_weight * jnp.einsum("stuw,sui->twi", w, input.list[ins.i_in])
             for ins, w in zip(lin.instructions, ws)
         ]
         return lin.aggregate_paths(paths, (self.output_size,))
@@ -295,6 +291,7 @@ def main():
             test_loss.block_until_ready()
             print(f'test loss: {test_loss:.2f} test accuracy: {test_accuracy} time train+val: {time.perf_counter() - t:.2f}s', flush=True)
             wandb.log({
+                '_step': i,
                 'step_time': time.perf_counter() - t,
                 'train_accuracy_left': train_accuracy[0],
                 'train_accuracy_background': train_accuracy[1],
