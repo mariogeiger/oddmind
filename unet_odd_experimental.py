@@ -62,7 +62,7 @@ def model(x):
         irreps = Irreps(f"{irreps_a} + {irreps_b.num_irreps}x0e + {irreps_b}")
 
         # Linear
-        x = n_vmap(1 + 3, MixChannels(mul, x.irreps))(x)
+        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, gate)(x)
 
@@ -72,7 +72,7 @@ def model(x):
         x = n_vmap(1 + 3 + 1, gate)(x)
 
         # Linear
-        x = n_vmap(1 + 3, MixChannels(mul, x.irreps))(x)
+        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, gate)(x)
 
@@ -99,12 +99,12 @@ def model(x):
         return IrrepsData(x.irreps, z1(x.contiguous), jax.tree_map(z2, x.list))
 
     # Convert to IrrepsData
-    x = IrrepsData.from_contiguous("0e", x[..., None, None])  # [batch, x, y, z, channel, irreps]
+    x = IrrepsData.from_contiguous("0e", x[..., None])  # [batch, x, y, z, irreps]
 
     mul = 3
 
     # Block A
-    x = cbg(x, mul, ['0e', '1o'])
+    x = Convolution(f'{mul}x0e + {mul}x1o', **kw)(x).factor_mul_to_last_axis()  # [batch, x, y, z, channel, irreps]
     x_a = x = cbg(x, mul, ['0e', '0o', '1e', '1o'])
     x = down(x)
 
