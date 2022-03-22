@@ -62,19 +62,19 @@ def model(x):
         irreps = Irreps(f"{irreps_a} + {irreps_b.num_irreps}x0e + {irreps_b}")
 
         # Linear
-        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
+        x = n_vmap(1 + 3, MixChannels(mul, x.irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
+        x = n_vmap(1 + 3 + 1, gate)(x)
 
         # Convolution
         x = jax.vmap(Convolution(irreps, **kw), 4, 4)(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
+        x = n_vmap(1 + 3 + 1, gate)(x)
 
         # Linear
-        x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
+        x = n_vmap(1 + 3, MixChannels(mul, x.irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, lambda x: gate(x, [jax.nn.gelu, jax.nn.tanh, jax.nn.sigmoid]))(x)
+        x = n_vmap(1 + 3 + 1, gate)(x)
 
         return x
 
