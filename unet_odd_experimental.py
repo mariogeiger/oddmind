@@ -8,8 +8,8 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, FunctionalLinear, Irrep, Irreps, IrrepsData,
-                      Linear, gate, index_add, scalar_activation)
+from e3nn_jax import (BatchNorm, Irrep, Irreps, IrrepsData, Linear, gate,
+                      index_add, scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -30,27 +30,9 @@ class MixChannels(hk.Module):
 
     def __call__(self, input: IrrepsData) -> IrrepsData:
         assert len(input.shape) == 1
-        input_size = input.shape[-1]
-
-        lin = FunctionalLinear(input.irreps, self.output_irreps)
-
-        ws = [
-            hk.get_parameter(
-                f'w[{ins.i_in},{ins.i_out}] {lin.irreps_in[ins.i_in]},{lin.irreps_out[ins.i_out]}',
-                shape=(input_size, self.output_size) + ins.path_shape,
-                init=hk.initializers.RandomNormal()
-            )
-            for ins in lin.instructions
-        ]
-        ws = jax.tree_map(lambda x: x / input_size**0.5, ws)
-
-        paths = [
-            None
-            if input.list[ins.i_in] is None else
-            ins.path_weight * jnp.einsum("stuw,sui->twi", w, input.list[ins.i_in])
-            for ins, w in zip(lin.instructions, ws)
-        ]
-        return lin.aggregate_paths(paths, (self.output_size,))
+        input = input.repeat_mul_by_last_axis()
+        output = Linear([(self.output_size * mul, ir) for mul, ir in self.output_irreps])(input)
+        return output.factor_mul_to_last_axis(self.output_size)
 
 
 # Model
@@ -69,10 +51,15 @@ def model(x):
         Irrep('0o'): jax.nn.tanh,
     })
 
-    def cbg(x, mul):
+    def cbg(x, mul, filter=None):
         assert len(x.shape) == 1 + 3 + 1  # (batch, x, y, z, channel)
 
-        irreps = Irreps("4x0e + 4x0o + 6x0e + 2x1e + 2x1o + 2e + 2o")
+        irreps_a = Irreps("4x0e + 4x0o")
+        irreps_b = Irreps("2x1e + 2x1o + 2e + 2o")
+        if filter is not None:
+            irreps_a = irreps_a.filter(filter)
+            irreps_b = irreps_b.filter(filter)
+        irreps = Irreps(f"{irreps_a} + {irreps_b.num_irreps}x0e + {irreps_b}")
 
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
@@ -114,11 +101,11 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None, None])  # [batch, x, y, z, channel, irreps]
 
-    mul = 2
+    mul = 3
 
     # Block A
-    x = cbg(x, mul)
-    x_a = x = cbg(x, mul)
+    x = cbg(x, mul, ['0e', '1o'])
+    x_a = x = cbg(x, mul, ['0e', '0o', '1e', '1o'])
     x = down(x)
 
     # Block B
@@ -145,12 +132,12 @@ def model(x):
     x = up(x)
     x = IrrepsData.cat([x, x_b], axis=-1)
     x = cbg(x, 3 * mul)
-    x = cbg(x, mul)
+    x = cbg(x, mul, ['0e', '0o', '1e', '1o'])
 
     # Block G
     x = up(x)
     x = IrrepsData.cat([x, x_a], axis=-1)
-    x = cbg(x, mul)
+    x = cbg(x, mul, ['0o', '1e', '2o'])
 
     x = jax.vmap(Convolution('8x0o', **kw), 4, 4)(x)
 
