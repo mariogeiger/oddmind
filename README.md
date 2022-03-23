@@ -40,3 +40,11 @@ python unet_odd.py
 Prediction of the cerebellum on a test brain (`data/x2.nii.gz`) made by an O(3)-equivariant network trained during 2000 steps (8 hours on a Tesla V100 PCIe 32GB) on a single brain (`data/x1.nii.gz`).
 
 ![Peek 2022-03-17 00-03](https://user-images.githubusercontent.com/333780/158734792-731a2861-2e6e-494c-938d-5239097d6133.gif)
+
+## Original vs group conv
+Using group convolution makes it 3x faster (on V100 gpu)
+
+![image](https://user-images.githubusercontent.com/333780/159776045-ebc16228-8254-4978-850d-ff72c720c9fa.png)
+
+We can also see that `group conv` model spend proportionally more time on non conv op
+![image](https://user-images.githubusercontent.com/333780/159776832-40560dd5-af44-4700-85ab-2746f878d2ef.png)
