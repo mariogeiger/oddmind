@@ -317,11 +317,11 @@ def main():
             test_pred[test_pred == 1] = 45
 
             orig = nib.load('data/y2.nii.gz')
-            img = nib.Nifti1Image(test_pred, orig.affine, orig.header)
+            img = nib.Nifti1Image(unpad(test_pred), orig.affine, orig.header)
             nib.save(img, f'{wandb.run.dir}/p2.{i:04d}.nii.gz')
 
             orig = nib.load('data/x2.nii.gz')
-            img = nib.Nifti1Image(x_test_patch, orig.affine, orig.header)
+            img = nib.Nifti1Image(unpad(x_test_patch)[0], orig.affine, orig.header)
             nib.save(img, f'{wandb.run.dir}/x2.nii.gz')
 
             _, _, train_pred = test_metrics(params, x_train_patch, y_train_patch)
@@ -332,11 +332,11 @@ def main():
             train_pred[train_pred == 1] = 45
 
             orig = nib.load('data/y1.nii.gz')
-            img = nib.Nifti1Image(train_pred, orig.affine, orig.header)
+            img = nib.Nifti1Image(unpad(train_pred), orig.affine, orig.header)
             nib.save(img, f'{wandb.run.dir}/p1.{i:04d}.nii.gz')
 
             orig = nib.load('data/x1.nii.gz')
-            img = nib.Nifti1Image(x_train_patch, orig.affine, orig.header)
+            img = nib.Nifti1Image(unpad(x_train_patch)[0], orig.affine, orig.header)
             nib.save(img, f'{wandb.run.dir}/x1.nii.gz')
 
         wandb.log(state)
