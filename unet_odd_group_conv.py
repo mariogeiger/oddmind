@@ -1,6 +1,5 @@
 import pickle
 import time
-from collections import defaultdict
 
 import haiku as hk
 import jax
@@ -8,8 +7,8 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, Irrep, Irreps, IrrepsData, Linear, gate,
-                      index_add, scalar_activation)
+from e3nn_jax import (BatchNorm, Irreps, IrrepsData, Linear, gate, index_add,
+                      scalar_activation)
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -45,11 +44,6 @@ def model(x):
         num_radial_basis=2,
         steps=(1.0, 1.0, 1.0)
     )
-    activations = defaultdict(lambda: None)
-    activations.update({
-        Irrep('0e'): jax.nn.gelu,
-        Irrep('0o'): jax.nn.tanh,
-    })
 
     def cbg(x, mul, filter=None):
         assert len(x.shape) == 1 + 3 + 1  # (batch, x, y, z, channel)
