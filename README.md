@@ -25,7 +25,7 @@ pip install --upgrade nibabel
 pip install --upgrade "jax[cpu]"  # change this to get cuda support!
 pip install --upgrade dm-haiku
 pip install --upgrade optax
-pip install e3nn-jax==0.4.0  # last version tested
+pip install e3nn-jax==0.4.2  # last version tested
 ```
 
 ## Execute
