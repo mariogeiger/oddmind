@@ -44,6 +44,8 @@ Prediction of the cerebellum on a test brain (`data/x2.nii.gz`) made by an O(3)-
 ## Original vs group conv
 Using group convolution makes it 3x faster (on V100 gpu)
 
+![image](https://user-images.githubusercontent.com/333780/159789326-fb24426e-4c54-47ec-b878-e8019dde9b5c.png)
+
 ![image](https://user-images.githubusercontent.com/333780/159776045-ebc16228-8254-4978-850d-ff72c720c9fa.png)
 
 We can also see that `group conv` model spend proportionally more time on non conv op
