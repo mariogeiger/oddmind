@@ -252,10 +252,6 @@ def main():
             if np.sum(unpad(y_patch) == -1) > 0 and np.sum(unpad(y_patch) == 1) > 0:
                 return x_patch, y_patch
 
-    print('compiling...', flush=True)
-    update(params, opt_state, *random_patch(x_train, y_train, size))
-    print('compiling done', flush=True)
-
     x_test, y_test = cerebellum(2)
     assert x_test.shape == (256, 256, 160)
     x_test_patch = x_test[None, 16:16+128, 42:42+128, 80-64:80+64]
@@ -263,6 +259,11 @@ def main():
 
     x_train_patch = x_train[:, 16:16+128, 42:42+128, 80-64:80+64]
     y_train_patch = y_train[:, 16:16+128, 42:42+128, 80-64:80+64]
+
+    print('compiling...', flush=True)
+    update(params, opt_state, *random_patch(x_train, y_train, size))
+    test_metrics(params, x_test_patch, y_test_patch)
+    print('compiling done', flush=True)
 
     print('start training', flush=True)
     time0 = time.perf_counter()
