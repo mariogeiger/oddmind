@@ -1,4 +1,5 @@
 import pickle
+import shutil
 import time
 
 import haiku as hk
@@ -7,8 +8,7 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, Irreps, IrrepsData, Linear, gate, index_add,
-                      scalar_activation)
+from e3nn_jax import BatchNorm, Irreps, IrrepsData, Linear, gate, index_add
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -34,6 +34,18 @@ class MixChannels(hk.Module):
         return output.factor_mul_to_last_axis(self.output_size)
 
 
+def g(x: IrrepsData) -> IrrepsData:
+    return gate(x, odd_act=jnp.tanh)
+
+
+def bn(x: IrrepsData) -> IrrepsData:
+    f = BatchNorm(instance=True, eps=0.1)
+    if x.ndim == 1 + 3:
+        return f(x)
+    if x.ndim == 1 + 3 + 1:
+        return jax.vmap(f, 4, 4)(x)
+
+
 # Model
 @hk.without_apply_rng
 @hk.transform
@@ -56,22 +68,20 @@ def model(x):
             irreps_b = irreps_b.filter(filter)
         irreps = Irreps(f"{irreps_a} + {irreps_b.num_irreps}x0e + {irreps_b}")
 
-        g = lambda x: gate(x, odd_act=jnp.tanh)
-
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
-        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, g)(x)
+        x = bn(x)
+        x = g(x)
 
         # Convolution
         x = jax.vmap(Convolution(irreps, **kw), 4, 4)(x)
-        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, g)(x)
+        x = bn(x)
+        x = g(x)
 
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
-        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, g)(x)
+        x = bn(x)
+        x = g(x)
 
         return x
 
@@ -141,8 +151,8 @@ def model(x):
     x = x.repeat_irreps_by_last_axis()  # [batch, x, y, z, irreps]
 
     for h in [round(16 * mul), round(16 * mul), 1]:
-        x = BatchNorm(instance=True)(x)
-        x = scalar_activation(x, [jnp.tanh])
+        x = bn(x)
+        x = g(x)
         x = n_vmap(1 + 3, Linear(f'{h}x0o'))(x)
 
     return x.contiguous[..., 0]  # Back from IrrepsData to jnp.array
@@ -202,6 +212,9 @@ def loss_fn(params, x, y):
 
 def main():
     wandb.init(project="oddmind")
+
+    # copy __file__ into wandb directory
+    shutil.copy(__file__, f'{wandb.run.dir}/script.py')
 
     print('start script', flush=True)
     size = 128
@@ -310,10 +323,7 @@ def main():
             jax.profiler.stop_trace()
 
         if i % 100 == 0:
-            # Save parameters and predictions (train and test)
-            with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
-                pickle.dump(params, f)
-
+            # Save predictions (train and test)
             test_pred = np.array(test_pred[0], dtype=np.float64)
             test_pred = np.sign(np.round(test_pred))
             test_pred[test_pred == -1] = 6
@@ -343,6 +353,9 @@ def main():
             nib.save(img, f'{wandb.run.dir}/x1.nii.gz')
 
         wandb.log(state)
+
+    with open(f'{wandb.run.dir}/params.pkl', 'wb') as f:
+        pickle.dump(params, f)
 
 
 if __name__ == "__main__":
