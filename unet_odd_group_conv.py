@@ -60,17 +60,17 @@ def model(x):
 
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
-        x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
+        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, g)(x)
 
         # Convolution
         x = jax.vmap(Convolution(irreps, **kw), 4, 4)(x)
-        x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
+        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, g)(x)
 
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
-        x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
+        x = jax.vmap(BatchNorm(instance=True, eps=0.1), 4, 4)(x)
         x = n_vmap(1 + 3 + 1, g)(x)
 
         return x
