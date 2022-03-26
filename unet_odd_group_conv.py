@@ -98,7 +98,7 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None])  # [batch, x, y, z, irreps]
 
-    mul = 4.4
+    mul = 4
 
     # Block A
     x = Convolution(f'{round(mul)}x0e + {round(mul)}x1o', **kw)(x).factor_mul_to_last_axis()  # [batch, x, y, z, channel, irreps]
