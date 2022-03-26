@@ -46,6 +46,7 @@ def model(x):
     )
 
     def cbg(x, mul, filter=None):
+        mul = round(mul)
         assert len(x.shape) == 1 + 3 + 1  # (batch, x, y, z, channel)
 
         irreps_a = Irreps("4x0e + 4x0o")
@@ -55,20 +56,22 @@ def model(x):
             irreps_b = irreps_b.filter(filter)
         irreps = Irreps(f"{irreps_a} + {irreps_b.num_irreps}x0e + {irreps_b}")
 
+        g = lambda x: gate(x, odd_act=jnp.tanh)
+
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, gate)(x)
+        x = n_vmap(1 + 3 + 1, g)(x)
 
         # Convolution
         x = jax.vmap(Convolution(irreps, **kw), 4, 4)(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, gate)(x)
+        x = n_vmap(1 + 3 + 1, g)(x)
 
         # Linear
         x = n_vmap(1 + 3, MixChannels(mul, irreps))(x)
         x = jax.vmap(BatchNorm(instance=True), 4, 4)(x)
-        x = n_vmap(1 + 3 + 1, gate)(x)
+        x = n_vmap(1 + 3 + 1, g)(x)
 
         return x
 
@@ -95,10 +98,10 @@ def model(x):
     # Convert to IrrepsData
     x = IrrepsData.from_contiguous("0e", x[..., None])  # [batch, x, y, z, irreps]
 
-    mul = 3
+    mul = 4.4
 
     # Block A
-    x = Convolution(f'{mul}x0e + {mul}x1o', **kw)(x).factor_mul_to_last_axis()  # [batch, x, y, z, channel, irreps]
+    x = Convolution(f'{round(mul)}x0e + {round(mul)}x1o', **kw)(x).factor_mul_to_last_axis()  # [batch, x, y, z, channel, irreps]
     x_a = x = cbg(x, mul, ['0e', '0o', '1e', '1o'])
     x = down(x)
 
@@ -131,7 +134,7 @@ def model(x):
     # Block G
     x = up(x)
     x = IrrepsData.cat([x, x_a], axis=-1)
-    x = cbg(x, mul, ['0o', '1e', '2o'])
+    x = cbg(x, mul, ['0o', '0e', '1e', '2o'])
 
     x = jax.vmap(Convolution('8x0o', **kw), 4, 4)(x)
 
