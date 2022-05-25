@@ -96,7 +96,7 @@ def model(x):
 
     def up(x):
         def z0(x):
-            return zoom(x, 2.0)  # bilinear interpolation
+            return zoom(x, resize_rate=2.0)  # bilinear interpolation
 
         z0 = jax.vmap(z0, -1, -1)  # channel index
         z1 = jax.vmap(z0, -1, -1)
