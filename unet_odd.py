@@ -7,8 +7,7 @@ import jax.numpy as jnp
 import nibabel as nib
 import numpy as np
 import optax
-from e3nn_jax import (BatchNorm, Irreps, IrrepsData, Linear, gate, index_add,
-                      scalar_activation)
+from e3nn_jax import BatchNorm, Irreps, IrrepsData, Linear, gate, index_add, scalar_activation
 from e3nn_jax.experimental.voxel_convolution import Convolution
 from e3nn_jax.experimental.voxel_pooling import zoom
 
@@ -25,23 +24,18 @@ def n_vmap(n, fun):
 @hk.without_apply_rng
 @hk.transform
 def model(x):
-    kw = dict(
-        irreps_sh=Irreps('0e + 1o + 2e'),
-        diameter=5.0,
-        num_radial_basis=2,
-        steps=(1.0, 1.0, 1.0)
-    )
+    kw = dict(irreps_sh=Irreps("0e + 1o + 2e"), diameter=5.0, num_radial_basis=2, steps=(1.0, 1.0, 1.0))
 
     def cbg(x, mul, ir_filter=None):
         mul0, mul1, mul2 = round(4 * mul), round(2 * mul), round(mul)
-        irreps_scalar = Irreps(f'{mul0}x0e + {mul0}x0o')
-        irreps_gated = Irreps(f'{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o')
+        irreps_scalar = Irreps(f"{mul0}x0e + {mul0}x0o")
+        irreps_gated = Irreps(f"{mul1}x1e + {mul1}x1o + {mul2}x2e + {mul2}x2o")
 
         if ir_filter:
             irreps_scalar = irreps_scalar.filter(ir_filter)
             irreps_gated = irreps_gated.filter(ir_filter)
 
-        x = Convolution(irreps_scalar + Irreps(f'{irreps_gated.num_irreps}x0e') + irreps_gated, **kw)(x)
+        x = Convolution(irreps_scalar + Irreps(f"{irreps_gated.num_irreps}x0e") + irreps_gated, **kw)(x)
         x = BatchNorm(instance=True)(x)
         x = n_vmap(1 + 3, lambda x: gate(x, even_act=jax.nn.gelu, odd_act=jnp.tanh, even_gate_act=jax.nn.sigmoid))(x)
         return x
@@ -53,14 +47,17 @@ def model(x):
                 x,
                 window_shape=(1, 2, 2, 2) + ones,
                 strides=(1, 2, 2, 2) + ones,
-                padding='SAME',
+                padding="SAME",
             )
+
         return jax.tree_map(pool, x)
+
     # down = jax.vmap(lambda x: maxpool(x, (2, 2, 2)))
 
     def up(x):
         def z0(x):
             return zoom(x, 2.0)  # bilinear interpolation
+
         z1 = jax.vmap(z0, -1, -1)
         z2 = jax.vmap(z1, -1, -1)
         return IrrepsData(x.irreps, z1(x.contiguous), jax.tree_map(z2, x.list))
@@ -71,8 +68,8 @@ def model(x):
     mul = 3
 
     # Block A
-    x = cbg(x, 2 * mul, ['0e', '1o', '2e'])
-    x_a = x = cbg(x, mul, ['0e', '0o', '1e', '1o'])
+    x = cbg(x, 2 * mul, ["0e", "1o", "2e"])
+    x_a = x = cbg(x, mul, ["0e", "0o", "1e", "1o"])
     x = down(x)
 
     # Block B
@@ -108,21 +105,21 @@ def model(x):
     # Block G
     x = up(x)
     x = IrrepsData.cat([x, x_a])
-    x = cbg(x, mul, ['0o', '1e', '2o'])
+    x = cbg(x, mul, ["0o", "1e", "2o"])
 
-    x = Convolution(f'{round(8 * mul)}x0o', **kw)(x)
+    x = Convolution(f"{round(8 * mul)}x0o", **kw)(x)
 
     for h in [round(16 * mul), round(16 * mul), 1]:
         x = BatchNorm(instance=True)(x)
         x = scalar_activation(x, [jnp.tanh])
-        x = n_vmap(1 + 3, Linear(f'{h}x0o'))(x)
+        x = n_vmap(1 + 3, Linear(f"{h}x0o"))(x)
 
     return x.contiguous[..., 0]  # Back from IrrepsData to jnp.array
 
 
 def cerebellum(i):
-    image = nib.load(f'data/x{i}.nii.gz')
-    label = nib.load(f'data/y{i}.nii.gz')
+    image = nib.load(f"data/x{i}.nii.gz")
+    label = nib.load(f"data/y{i}.nii.gz")
 
     assert (image.affine == label.affine).all()
     assert image.header.get_zooms() == (1, 1, 1)
@@ -175,7 +172,7 @@ def loss_fn(params, x, y):
 def main():
     wandb.init(project="oddmind")
 
-    print('start script', flush=True)
+    print("start script", flush=True)
     size = 128
 
     # Optimizer
@@ -208,9 +205,9 @@ def main():
 
     rng = jax.random.PRNGKey(2)
     x = jnp.ones((1, size, size, size))
-    print('initialization...', flush=True)
+    print("initialization...", flush=True)
     params = model.init(rng, x)
-    print('initialization done', flush=True)
+    print("initialization done", flush=True)
     opt_state = opt.init(params)
 
     x_train, y_train = cerebellum(1)
@@ -222,68 +219,78 @@ def main():
             xi = np.random.randint(0, x.shape[1] - n + 1)
             yi = np.random.randint(0, x.shape[2] - n + 1)
             zi = np.random.randint(0, x.shape[3] - n + 1)
-            x_patch = x[..., xi:xi + n, yi:yi + n, zi:zi + n]
-            y_patch = y[..., xi:xi + n, yi:yi + n, zi:zi + n]
+            x_patch = x[..., xi : xi + n, yi : yi + n, zi : zi + n]
+            y_patch = y[..., xi : xi + n, yi : yi + n, zi : zi + n]
             if np.sum(unpad(y_patch) == -1) > 0 and np.sum(unpad(y_patch) == 1) > 0:
                 return x_patch, y_patch
 
     x_test, y_test = cerebellum(2)
     assert x_test.shape == (256, 256, 160)
-    x_test_patch = x_test[None, 16:16+128, 42:42+128, 80-64:80+64]
-    y_test_patch = y_test[None, 16:16+128, 42:42+128, 80-64:80+64]
+    x_test_patch = x_test[None, 16 : 16 + 128, 42 : 42 + 128, 80 - 64 : 80 + 64]
+    y_test_patch = y_test[None, 16 : 16 + 128, 42 : 42 + 128, 80 - 64 : 80 + 64]
 
-    x_train_patch = x_train[:, 16:16+128, 42:42+128, 80-64:80+64]
-    y_train_patch = y_train[:, 16:16+128, 42:42+128, 80-64:80+64]
+    x_train_patch = x_train[:, 16 : 16 + 128, 42 : 42 + 128, 80 - 64 : 80 + 64]
+    y_train_patch = y_train[:, 16 : 16 + 128, 42 : 42 + 128, 80 - 64 : 80 + 64]
 
-    print('compiling...', flush=True)
+    print("compiling...", flush=True)
     update(params, opt_state, *random_patch(x_train, y_train, size))
     test_metrics(params, x_test_patch, y_test_patch)
-    print('compiling done', flush=True)
+    print("compiling done", flush=True)
 
-    print('start training', flush=True)
+    print("start training", flush=True)
     time0 = time.perf_counter()
 
     for i in range(2001):
         if i == 20:
             jax.profiler.start_trace(wandb.run.dir)
 
-        params, opt_state, train_loss, train_accuracy, train_pred = update(params, opt_state, *random_patch(x_train, y_train, size))
+        params, opt_state, train_loss, train_accuracy, train_pred = update(
+            params, opt_state, *random_patch(x_train, y_train, size)
+        )
         train_loss.block_until_ready()
 
-        print(f'[{i:04d}:{time.perf_counter() - time0:.1f}] train loss: {train_loss:.2f} train accuracy: {train_accuracy}', flush=True)
+        print(
+            f"[{i:04d}:{time.perf_counter() - time0:.1f}] train loss: {train_loss:.2f} train accuracy: {train_accuracy}",
+            flush=True,
+        )
 
         state = {
-            'iteration': i,
-            '_runtime': time.perf_counter() - time0,
-            'train_accuracy_left': train_accuracy[0],
-            'train_accuracy_background': train_accuracy[1],
-            'train_accuracy_right': train_accuracy[2],
-            'train_loss': train_loss,
-            'train_pred_min': np.min(train_pred),
-            'train_pred_max': np.max(train_pred),
+            "iteration": i,
+            "_runtime": time.perf_counter() - time0,
+            "train_accuracy_left": train_accuracy[0],
+            "train_accuracy_background": train_accuracy[1],
+            "train_accuracy_right": train_accuracy[2],
+            "train_loss": train_loss,
+            "train_pred_min": np.min(train_pred),
+            "train_pred_max": np.max(train_pred),
         }
 
         if i % 10 == 0:
             test_loss, test_accuracy, test_pred = test_metrics(params, x_test_patch, y_test_patch)
             test_loss.block_until_ready()
 
-            print(f'[{i:04d}:{time.perf_counter() - time0:.1f}] test loss: {test_loss:.2f} test accuracy: {test_accuracy}', flush=True)
+            print(
+                f"[{i:04d}:{time.perf_counter() - time0:.1f}] test loss: {test_loss:.2f} test accuracy: {test_accuracy}",
+                flush=True,
+            )
 
-            state.update({
-                'test_accuracy_left': test_accuracy[0],
-                'test_accuracy_background': test_accuracy[1],
-                'test_accuracy_right': test_accuracy[2],
-                'test_loss': test_loss,
-                'test_pred_min': np.min(test_pred),
-                'test_pred_max': np.max(test_pred),
-            })
+            state.update(
+                {
+                    "test_accuracy_left": test_accuracy[0],
+                    "test_accuracy_background": test_accuracy[1],
+                    "test_accuracy_right": test_accuracy[2],
+                    "test_loss": test_loss,
+                    "test_pred_min": np.min(test_pred),
+                    "test_pred_max": np.max(test_pred),
+                }
+            )
 
         if i == 20:
             jax.profiler.stop_trace()
 
         if i % 100 == 0:
             # Save parameters and predictions (train and test)
-            with open(f'{wandb.run.dir}/params.{i:04d}.pkl', 'wb') as f:
+            with open(f"{wandb.run.dir}/params.{i:04d}.pkl", "wb") as f:
                 pickle.dump(params, f)
 
             test_pred = np.array(test_pred[0], dtype=np.float64)
@@ -291,13 +298,13 @@ def main():
             test_pred[test_pred == -1] = 6
             test_pred[test_pred == 1] = 45
 
-            orig = nib.load('data/y2.nii.gz')
+            orig = nib.load("data/y2.nii.gz")
             img = nib.Nifti1Image(unpad(test_pred), orig.affine, orig.header)
-            nib.save(img, f'{wandb.run.dir}/p2.{i:04d}.nii.gz')
+            nib.save(img, f"{wandb.run.dir}/p2.{i:04d}.nii.gz")
 
-            orig = nib.load('data/x2.nii.gz')
+            orig = nib.load("data/x2.nii.gz")
             img = nib.Nifti1Image(unpad(x_test_patch)[0], orig.affine, orig.header)
-            nib.save(img, f'{wandb.run.dir}/x2.nii.gz')
+            nib.save(img, f"{wandb.run.dir}/x2.nii.gz")
 
             _, _, train_pred = test_metrics(params, x_train_patch, y_train_patch)
 
@@ -306,13 +313,13 @@ def main():
             train_pred[train_pred == -1] = 6
             train_pred[train_pred == 1] = 45
 
-            orig = nib.load('data/y1.nii.gz')
+            orig = nib.load("data/y1.nii.gz")
             img = nib.Nifti1Image(unpad(train_pred), orig.affine, orig.header)
-            nib.save(img, f'{wandb.run.dir}/p1.{i:04d}.nii.gz')
+            nib.save(img, f"{wandb.run.dir}/p1.{i:04d}.nii.gz")
 
-            orig = nib.load('data/x1.nii.gz')
+            orig = nib.load("data/x1.nii.gz")
             img = nib.Nifti1Image(unpad(x_train_patch)[0], orig.affine, orig.header)
-            nib.save(img, f'{wandb.run.dir}/x1.nii.gz')
+            nib.save(img, f"{wandb.run.dir}/x1.nii.gz")
 
         wandb.log(state)
 
