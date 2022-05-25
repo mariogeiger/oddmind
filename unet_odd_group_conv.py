@@ -81,16 +81,13 @@ def model(x):
         return x
 
     def down(x):  # TODO replace by pool max
-        def pool(x):
-            ones = (1,) * (x.ndim - 4)
-            return hk.avg_pool(
-                x,
-                window_shape=(1, 2, 2, 2) + ones,
-                strides=(1, 2, 2, 2) + ones,
-                padding="SAME",
-            )
+        def z0(x):
+            return zoom(x, resize_rate=0.5)  # bilinear interpolation
 
-        return jax.tree_map(pool, x)
+        z0 = jax.vmap(z0, -1, -1)  # channel index
+        z1 = jax.vmap(z0, -1, -1)
+        z2 = jax.vmap(z1, -1, -1)
+        return IrrepsData(x.irreps, z1(x.contiguous), jax.tree_map(z2, x.list))
 
     # down = jax.vmap(lambda x: maxpool(x, (2, 2, 2)))
 
